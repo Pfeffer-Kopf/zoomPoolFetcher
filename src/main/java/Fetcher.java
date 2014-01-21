@@ -3,7 +3,9 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.w3c.dom.Attr;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
@@ -22,14 +24,12 @@ import javax.xml.xpath.XPathFactory;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.text.MessageFormat.format;
 
@@ -38,9 +38,8 @@ import static java.text.MessageFormat.format;
  */
 public class Fetcher {
 
-    private final String noteTemplate = "\n{p} {note} {/p}";
+    private final String noteTemplate = "{p} {note} {/p}";
 
-    private XPathFactory xpathFactory = XPathFactory.newInstance();
     private DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 
     private final Properties properties;
@@ -77,6 +76,17 @@ public class Fetcher {
     public void startPolling() throws Exception {
 
         org.w3c.dom.Document xml = parseXml();
+        Map<String, Node> nodeMap = newHashMap();
+        NodeList nl = xml.getElementsByTagName("note");
+
+        for (int i = 0; i < nl.getLength(); i++) {
+            org.w3c.dom.Element item = (org.w3c.dom.Element) nl.item(i);
+            String player = item.getAttribute("player");
+            nodeMap.put(player, item);
+        }
+
+        System.out.println("Loaded players XML , parsed " + nodeMap.size() + " players");
+
         int updated = 0, inserted = 0, not_touched = 0;
 
         for (String stakeEntry : stakes) {
@@ -106,7 +116,7 @@ public class Fetcher {
                 System.out.println(name + " : " + note);
 
                 try {
-                    int action = addPlayerNote(name, note, label, xml);
+                    int action = addPlayerNote(name, note, label, xml, nodeMap);
                     switch (action) {
                         case 1:
                             inserted++;
@@ -125,10 +135,13 @@ public class Fetcher {
             }
 
         }
+
         safeXml(xml);
 
         System.out.println();
-        System.out.println(format("notes updated/created/not touched {0}/{1}/{2}", updated, inserted, not_touched));
+        System.out.println(format("notes updated/created/not touched {0}/{1}/{2}", updated, inserted, not_touched)
+
+        );
 
     }
 
@@ -136,28 +149,28 @@ public class Fetcher {
         return Integer.parseInt(element.text().trim().replaceFirst("\\.[0-9]k", "000").replaceFirst("\\.[0-9]+M", "000000").replace("k", "000").replace("M", "000000"));
     }
 
-    private int addPlayerNote(String name, String note, int label, org.w3c.dom.Document xml) throws Exception {
+    private int addPlayerNote(String name, String note, int label, org.w3c.dom.Document xml, Map<String, Node> nodeMap) throws Exception {
 
-        XPath xpath = xpathFactory.newXPath();
-        Node node = (Node) xpath.evaluate("/notes/note[@player='" + name + "']", xml, XPathConstants.NODE);
-
+        Node node = nodeMap.get(name);
         String newNote = noteTemplate.replace("{note}", note);
+        String time = String.valueOf(new Date().getTime());
         if (node != null) {
             if (node.getTextContent().contains("{p}"))
-                if (!node.getTextContent().contains(newNote))
-                    node.setTextContent(node.getTextContent().replaceFirst("\n\\{p\\}.*\\{/p\\}", newNote));
-                else
+                if (!node.getTextContent().contains(newNote)) {
+                    node.setTextContent(node.getTextContent().replaceFirst("\\{p\\}.*\\{/p\\}", newNote));
+                    Attr attr = (Attr) node.getAttributes().getNamedItem("update");
+                    attr.setValue(time.substring(0, time.length() - 3));
+                } else
                     return 0;
             else
-                node.setTextContent(node.getTextContent() + newNote);
+                node.setTextContent(node.getTextContent() + "\n" + newNote);
             return 2;
         } else {
-            // create a new node
+            // create a new nodeList
             Node notes = xml.getFirstChild();
             org.w3c.dom.Element noteElement = xml.createElement("note");
             noteElement.setAttribute("player", name);
             noteElement.setAttribute("label", String.valueOf(label));
-            String time = String.valueOf(new Date().getTime());
             noteElement.setAttribute("update", time.substring(0, time.length() - 3));
             noteElement.setTextContent(newNote);
             notes.appendChild(noteElement);
