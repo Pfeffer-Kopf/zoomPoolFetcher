@@ -54,17 +54,22 @@ public class Fetcher {
         this.url = (String) properties.get("url");
         this.stakes = ((String) properties.get("stakes")).split(",");
         this.notesFile = (String) properties.get("notes");
-        this.labels = new int[4];
+        this.labels = new int[5];
 
         labels[0] = Integer.parseInt((String) properties.get("label.clueless"));
         labels[1] = Integer.parseInt((String) properties.get("label.very_bad"));
         labels[2] = Integer.parseInt((String) properties.get("label.loser"));
         labels[3] = Integer.parseInt((String) properties.get("label.winner"));
+        labels[4] = Integer.parseInt((String) properties.get("label.few_hands"));
 
         ignorePlayers.addAll(Arrays.asList(((String) properties.get("ignore.players")).split(",")));
 
         this.properties = properties;
 
+    }
+
+    private int getLabel(String name) {
+        return Integer.parseInt((String) properties.get(name));
     }
 
     public Document executeRequest(String url) throws Exception {
@@ -89,48 +94,53 @@ public class Fetcher {
 
         int updated = 0, inserted = 0, not_touched = 0;
 
+        String[] sortingTypes = new String[]{"{winnings}", "{winrate}", "{vipip}"};
+        String[] sorting = new String[]{"asc", "desc"};
+
         for (String stakeEntry : stakes) {
             String[] stake = stakeEntry.split(":");
-            System.out.println(format("Polling for NL{0} {1}-max", stake[0], stake[1]));
-            Document doc = executeRequest(url.replace("{stake}", stake[0]).replace("{players}", stake[1]));
-            Elements names = doc.select("tr");
-            System.out.println("found " + names.size() + " players");
-            for (Element entry : names) {
-                String name = entry.select("td a").text().trim();
-                if (isNullOrEmpty(name) || ignorePlayers.contains(name))
-                    continue;
 
-                Elements stats = entry.select("td.color_emphasis");
-                int hands = parseHands(stats.get(1));
+            String url = this.url.replace("{stake}", stake[0]).replace("{players}", stake[1]);
 
-                if (hands < 2000) // not enough hands to make a statement
-                    continue;
+            for (String type : sortingTypes) {
+                for (String sortType : sorting) {
+                    System.out.println(format("Polling for NL{0} {1}-max {2} {3}", stake[0], stake[1], type, sortType));
+                    Document doc = executeRequest(url.replace(type, sortType).replaceAll("\\{.+?\\}", ""));
+                    Elements names = doc.select("tr");
+                    System.out.println("found " + names.size() + " players");
+                    for (Element entry : names) {
+                        String name = entry.select("td a").text().trim();
+                        if (isNullOrEmpty(name) || ignorePlayers.contains(name))
+                            continue;
 
-                Float winRate = Float.parseFloat(stats.get(3).text().trim());
+                        try {
+                            Elements stats = entry.select("td.color_emphasis");
+                            int hands = parseHands(stats.get(1));
 
-                int label = assingLabel(winRate);
-
-                String note = format("H: {0} /VP: {1} /PFR: {2} /3B: {3} /rate: {4} /profit: {5}",
-                        add(stats.get(1)), add(stats.get(5)), add(stats.get(6)), add(stats.get(7)), add(stats.get(3)), add(stats.get(2)));
-
-                System.out.println(name + " : " + note);
-
-                try {
-                    int action = addPlayerNote(name, note, label, xml, nodeMap);
-                    switch (action) {
-                        case 1:
-                            inserted++;
-                            break;
-                        case 2:
-                            updated++;
-                            break;
-                        case 0:
-                            not_touched++;
+                            Float winRate = Float.parseFloat(stats.get(3).text().trim());
+                            int label = assingLabel(winRate);
+                            if (hands < 2000) { // not enough hands to make a statement
+                                label = getLabel("label.few_hands");
+                            }
+                            String note = format("H: {0} /VP: {1} /PFR: {2} /3B: {3} /rate: {4} /profit: {5}",
+                                    add(stats.get(1)), add(stats.get(5)), add(stats.get(6)), add(stats.get(7)), add(stats.get(3)), add(stats.get(2)));
+                            System.out.println(format("{0} : {1} : label {2} ", name, note, label));
+                            int action = addPlayerNote(name, note, label, xml, nodeMap);
+                            switch (action) {
+                                case 1:
+                                    inserted++;
+                                    break;
+                                case 2:
+                                    updated++;
+                                    break;
+                                case 0:
+                                    not_touched++;
+                            }
+                        } catch (Exception ex) {
+                            System.out.println("could not add note for player : " + name);
+                        }
                     }
-                } catch (Exception ex) {
-                    System.out.println("could not add note for player : " + name);
                 }
-
 
             }
 
@@ -182,13 +192,13 @@ public class Fetcher {
     private int assingLabel(Float winrate) {
         // this section can be edited by you
         if (winrate < -12.0) {
-            return labels[0];
+            return getLabel("label.clueless");
         } else if (winrate < -7.0) {
-            return labels[1];
+            return getLabel("label.very_bad");
         } else if (winrate < -2.0) {
-            return labels[2];
+            return getLabel("label.loser");
         } else if (winrate > 1.0) {
-            return labels[3];
+            return getLabel("label.winner");
         } else
             return -1;
     }
