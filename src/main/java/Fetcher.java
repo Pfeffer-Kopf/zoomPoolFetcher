@@ -32,6 +32,7 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 import static com.google.common.collect.Maps.newHashMap;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.text.MessageFormat.format;
+import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 
 /**
  * Created by Roman on 12/29/13.
@@ -228,7 +229,7 @@ public class Fetcher {
         properties.load(new FileReader("zoomFetcher.properties"));
         final Fetcher fetcher = new Fetcher(properties);
 
-        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(new Runnable() {
+        newSingleThreadScheduledExecutor().scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
                 try {
