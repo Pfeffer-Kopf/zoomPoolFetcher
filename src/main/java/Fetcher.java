@@ -47,7 +47,6 @@ public class Fetcher {
     private String url;
     private String[] stakes;
     private String notesFile;
-    private int[] labels;
     private Set<String> ignorePlayers = newHashSet();
 
     public Fetcher(Properties properties) {
@@ -55,16 +54,7 @@ public class Fetcher {
         this.url = (String) properties.get("url");
         this.stakes = ((String) properties.get("stakes")).split(",");
         this.notesFile = (String) properties.get("notes");
-        this.labels = new int[5];
-
-        labels[0] = Integer.parseInt((String) properties.get("label.clueless"));
-        labels[1] = Integer.parseInt((String) properties.get("label.very_bad"));
-        labels[2] = Integer.parseInt((String) properties.get("label.loser"));
-        labels[3] = Integer.parseInt((String) properties.get("label.winner"));
-        labels[4] = Integer.parseInt((String) properties.get("label.few_hands"));
-
-        ignorePlayers.addAll(Arrays.asList(((String) properties.get("ignore.players")).split(",")));
-
+        this.ignorePlayers.addAll(Arrays.asList(((String) properties.get("ignore.players")).split(",")));
         this.properties = properties;
 
     }
@@ -75,6 +65,7 @@ public class Fetcher {
 
     public Document executeRequest(String url) throws Exception {
         AsyncHttpClient client = new AsyncHttpClient();
+
         String body = client.prepareGet(url).execute().get().getResponseBody();
         return Jsoup.parse(body);
     }
@@ -97,6 +88,7 @@ public class Fetcher {
 
         String[] sortingTypes = new String[]{"{winnings}", "{winrate}", "{vipip}"};
         String[] sorting = new String[]{"asc", "desc"};
+        Set<String> playerNames = newHashSet();
 
         for (String stakeEntry : stakes) {
             String[] stake = stakeEntry.split(":");
@@ -125,8 +117,13 @@ public class Fetcher {
                             }
                             String note = format("H: {0} /VP: {1} /PFR: {2} /3B: {3} /rate: {4} /profit: {5}",
                                     add(stats.get(1)), add(stats.get(5)), add(stats.get(6)), add(stats.get(7)), add(stats.get(3)), add(stats.get(2)));
-                            System.out.println(format("{0} : {1} : label {2} ", name, note, label));
                             int action = addPlayerNote(name, note, label, xml, nodeMap);
+
+                            System.out.println(format("{0} : {1} : label {2} - {3} ", name, note, label , action == 1 ? "added" : "updated"));
+
+                            if (!playerNames.add(name))
+                                continue;
+
                             switch (action) {
                                 case 1:
                                     inserted++;
@@ -169,8 +166,10 @@ public class Fetcher {
             if (node.getTextContent().contains("{p}"))
                 if (!node.getTextContent().contains(newNote)) {
                     node.setTextContent(node.getTextContent().replaceFirst("\\{p\\}.*\\{/p\\}", newNote));
-                    Attr attr = (Attr) node.getAttributes().getNamedItem("update");
-                    attr.setValue(time.substring(0, time.length() - 3));
+                    Attr updateAttr = (Attr) node.getAttributes().getNamedItem("update");
+                    updateAttr.setValue(time.substring(0, time.length() - 3));
+                    Attr lableAttr = (Attr) node.getAttributes().getNamedItem("label");
+                    lableAttr.setValue(String.valueOf(label));
                 } else
                     return 0;
             else
