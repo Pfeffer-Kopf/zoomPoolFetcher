@@ -17,15 +17,10 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -65,7 +60,6 @@ public class Fetcher {
 
     public Document executeRequest(String url) throws Exception {
         AsyncHttpClient client = new AsyncHttpClient();
-
         String body = client.prepareGet(url).execute().get().getResponseBody();
         return Jsoup.parse(body);
     }
@@ -111,7 +105,7 @@ public class Fetcher {
                             int hands = parseHands(stats.get(1));
 
                             Float winRate = Float.parseFloat(stats.get(3).text().trim());
-                            int label = assingLabel(winRate);
+                            int label = assignLabel(winRate);
                             if (hands < 2000) { // not enough hands to make a statement
                                 label = getLabel("label.few_hands");
                             }
@@ -189,7 +183,7 @@ public class Fetcher {
     }
 
 
-    private int assingLabel(Float winrate) {
+    private int assignLabel(Float winrate) {
         // this section can be edited by you
         if (winrate < -12.0) {
             return getLabel("label.clueless");
