@@ -194,7 +194,7 @@ public class Fetcher {
         } else if (winrate > 1.0) {
             return getLabel("label.winner");
         } else
-            return -1;
+            return getLabel("label.break_even");
     }
 
 
